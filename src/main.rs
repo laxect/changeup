@@ -1,11 +1,11 @@
 #![feature(drain_filter)]
 use std::{collections::LinkedList, time::Duration};
 
+use changeup::LEN;
 use redis::Commands;
 use swayipc::{Connection, EventType, Node, WindowChange};
 
 const SUBS: [swayipc::EventType; 1] = [EventType::Window];
-const LEN: usize = 32;
 
 fn focus(eve: Node, last: &mut LinkedList<i64>) -> anyhow::Result<()> {
     let node_id = eve.id;
@@ -48,7 +48,7 @@ fn main() -> anyhow::Result<()> {
         }
         dbg!(&last);
         if let Some(last) = last.front() {
-            let _: () = redis_con.set("sway:last_focus", last)?;
+            let _: () = redis_con.set(changeup::KEY, last)?;
         }
     }
     Ok(())
