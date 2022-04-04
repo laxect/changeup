@@ -1,5 +1,4 @@
-#![feature(drain_filter)]
-use std::time::Duration;
+use std::{collections::VecDeque, time::Duration};
 
 use changeup::LEN;
 use redis::Commands;
@@ -7,22 +6,22 @@ use swayipc::{Connection, EventType, Node, WindowChange};
 
 const SUBS: [swayipc::EventType; 1] = [EventType::Window];
 
-fn focus(eve: Node, last: &mut Vec<i64>) -> anyhow::Result<()> {
+fn focus(eve: Node, last: &mut VecDeque<i64>) -> anyhow::Result<()> {
     let node_id = eve.id;
-    let _ = last.drain_filter(|id| *id == node_id);
-    last.push(node_id);
+    let _ = last.retain(|id| *id != node_id);
+    last.push_back(node_id);
     if last.len() > LEN {
-        last.remove(0);
+        last.pop_front();
     }
     Ok(())
 }
 
-fn close(eve: Node, last: &mut Vec<i64>) -> anyhow::Result<()> {
+fn close(eve: Node, last: &mut VecDeque<i64>) -> anyhow::Result<()> {
     let node_id = eve.id;
     if !last.contains(&node_id) {
         return Ok(());
     }
-    let _ = last.drain_filter(|id| *id == node_id);
+    let _ = last.retain(|id| *id != node_id);
     Ok(())
 }
 
@@ -31,7 +30,7 @@ fn main() -> anyhow::Result<()> {
     let redis = redis::Client::open("redis://127.0.0.1")?;
     let mut redis_con = redis.get_connection()?;
     redis_con.set_write_timeout(Some(Duration::from_millis(500)))?;
-    let mut last = Vec::new();
+    let mut last = VecDeque::new();
     for event in conn.subscribe(SUBS)? {
         let event = match event? {
             swayipc::Event::Window(win_event) => *win_event,
