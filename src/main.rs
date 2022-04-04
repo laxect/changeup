@@ -22,7 +22,7 @@ fn close(eve: Node, last: &mut Vec<i64>) -> anyhow::Result<()> {
     if !last.contains(&node_id) {
         return Ok(());
     }
-    let items = last.drain_filter(|id| *id == node_id);
+    let _ = last.drain_filter(|id| *id == node_id);
     Ok(())
 }
 
