@@ -1,6 +1,7 @@
 [package]
 name = "changeup"
 version = "0.1.0"
+default-run = "changeup"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -13,5 +14,6 @@ dbus-tokio = "0.7.5"
 env_logger = "0.9.0"
 futures = "0.3.21"
 log = "0.4.16"
+swayipc = "3.0.0"
 swayipc-async = "2.0.0"
 tokio = { version = "1.17.0", features = ["rt-multi-thread"] }

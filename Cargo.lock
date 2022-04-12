@@ -86,6 +86,7 @@ dependencies = [
  "env_logger",
  "futures",
  "log",
+ "swayipc",
  "swayipc-async",
  "tokio",
 ]
@@ -489,6 +490,17 @@ checksum = "66d72b759436ae32898a2af0a14218dbf55efde3feeb170eb623637db85ee1e0"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "swayipc"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40cc7e2bba9f31e7c46b119d9c542496806b9114676d8f46aa5c9c950ececaec"
+dependencies = [
+ "serde",
+ "serde_json",
+ "swayipc-types",
 ]
 
 [[package]]
