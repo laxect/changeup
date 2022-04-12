@@ -3,9 +3,9 @@ use std::{collections::VecDeque, future, sync::Arc};
 use dbus::{channel::MatchingReceiver, message::MatchRule};
 use dbus_crossroads::Crossroads;
 use futures::{lock::Mutex, FutureExt, StreamExt};
-use swayipc_async::{EventType, Node, WindowChange};
+use swayipc_async::{Event, EventType, Node, WindowChange};
 
-const SUBS: [swayipc::EventType; 1] = [EventType::Window];
+const SUBS: [swayipc_async::EventType; 1] = [EventType::Window];
 
 fn focus(eve: Node, last: &mut VecDeque<i64>) -> anyhow::Result<()> {
     let node_id = eve.id;
@@ -34,7 +34,7 @@ async fn moniter(last: Arc<Mutex<Option<i64>>>) -> anyhow::Result<()> {
     let mut stream = conn.subscribe(&SUBS).await?;
     while let Some(event) = stream.next().await {
         let event = match event? {
-            swayipc::Event::Window(win_event) => *win_event,
+            Event::Window(win_event) => *win_event,
             _ => unreachable!(),
         };
         match event.change {
