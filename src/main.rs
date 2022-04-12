@@ -65,8 +65,6 @@ async fn dbus_station(last: Arc<Mutex<Option<i64>>>) -> anyhow::Result<()> {
         log::error!("Lost connection to D-Bus: {}", err);
     });
 
-    conn.request_name(changeup::NAME, true, true, false).await?;
-
     let mut road = Crossroads::new();
     road.set_async_support(Some((
         conn.clone(),
@@ -90,6 +88,7 @@ async fn dbus_station(last: Arc<Mutex<Option<i64>>>) -> anyhow::Result<()> {
     road.insert("/", &[ifact_token], last.clone());
     log::info!("station set up");
 
+    conn.request_name(changeup::NAME, true, true, false).await?;
     conn.start_receive(
         MatchRule::new_method_call(),
         Box::new(move |msg, conn| {
