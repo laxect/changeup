@@ -1,0 +1,9 @@
+[Unit]
+Description=Changeup server
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=moe.gyara.changeup
+Environment="RUST_LOG=info"
+ExecStart=/usr/bin/changeup
