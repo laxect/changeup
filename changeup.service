@@ -6,4 +6,4 @@ PartOf=graphical-session.target
 Type=dbus
 BusName=moe.gyara.changeup
 Environment="RUST_LOG=info"
-ExecStart=/usr/bin/changeup -c %h/.config/changeup/config.toml
+ExecStart=/usr/bin/changeup

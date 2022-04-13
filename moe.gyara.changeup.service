@@ -1,4 +1,4 @@
 [D-BUS Service]
 Name=moe.gyara.changeup
-Exec=/usr/bin/changeup -c %h/.config/changeup/config.toml
+Exec=/usr/bin/changeup
 SystemdService=changeup.service

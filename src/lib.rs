@@ -107,19 +107,16 @@ pub struct ChangeUp {
     pub conn: Connection,
 }
 
+const DEFAULT_CONFIG: &str = "changeup/config.toml";
+
 impl ChangeUp {
     pub async fn last() -> anyhow::Result<Last> {
-        let change_up = Self {
-            last: None,
-            now_on: None,
-            index: HashMap::default(),
-            conn: Connection::new().await?,
-            ruleset: RuleSet::default(),
-        };
-        Ok(Arc::new(Mutex::new(change_up)))
+        let mut config = dirs::config_dir().ok_or_else(|| anyhow::anyhow!("?"))?;
+        config.push(DEFAULT_CONFIG);
+        Self::last_with_config(config).await
     }
 
-    pub async fn last_with_config(config_path: &Path) -> anyhow::Result<Last> {
+    pub async fn last_with_config<P: AsRef<Path>>(config_path: P) -> anyhow::Result<Last> {
         let mut config_file = File::open(config_path)?;
         let mut config = String::new();
         config_file.read_to_string(&mut config)?;
