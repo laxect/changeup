@@ -3,7 +3,7 @@
   "json": {},
   "markdown": {},
   "rustfmt": {
-    "max_width": 120
+    "max_width": 150
   },
   "toml": {},
   "includes": [
