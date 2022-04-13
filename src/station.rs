@@ -2,7 +2,6 @@ use std::{fs::File, future, io::Read, path::Path};
 
 use dbus::{channel::MatchingReceiver, message::MatchRule, MethodErr};
 use dbus_crossroads::{Crossroads, IfaceBuilder};
-use swayipc_async::Connection;
 
 use crate::{ChangeUpConfig, ConId, Criteria, Last};
 
@@ -10,37 +9,12 @@ mod rule;
 
 pub use rule::{Rule, RuleSet};
 
-async fn jump_back(conn: &mut Connection, last: i64) {
-    conn.run_command(last.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
-}
-
-async fn focus_con(conn: &mut Connection, con_id: i64) {
-    conn.run_command(con_id.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
-}
-
-fn last_viewed(b: &mut IfaceBuilder<Last>) {
-    b.property("last_viewed_exist").get_async(move |mut ctx, change_up| {
-        let change_up = change_up.clone();
-        async move { ctx.reply(Ok(change_up.lock().await.last.is_some())) }
+fn basic(b: &mut IfaceBuilder<Last>) {
+    b.property("version").get(|_, _| {
+        let version = std::env!("CARGO_PKG_VERSION");
+        Ok(version.to_owned())
     });
-    b.property("last_viewed").get_async(move |mut ctx, change_up| {
-        let change_up = change_up.clone();
-        async move {
-            let last = change_up.lock().await.last.to_owned().unwrap_or(-1);
-            ctx.reply(Ok(last))
-        }
-    });
-    b.method_with_cr_async(crate::JUMP_BACK_METHOD, (), (), move |mut ctx, cr, _: ()| {
-        let change_up: &Last = cr.data_mut(ctx.path()).unwrap();
-        let change_up = change_up.clone();
-        async move {
-            let mut change_up = change_up.lock().await;
-            if let Some(last) = change_up.last {
-                jump_back(&mut change_up.conn, last).await;
-            }
-            ctx.reply(Ok(()))
-        }
-    });
+    b.method("Ping", (), ("pong",), |_, _, _: ()| Ok(("pong".to_owned(),)));
 }
 
 fn load_config<P: AsRef<Path>>(path: P) -> anyhow::Result<ChangeUpConfig> {
@@ -80,12 +54,29 @@ fn config(b: &mut IfaceBuilder<Last>) {
     });
 }
 
-fn basic(b: &mut IfaceBuilder<Last>) {
-    b.property("version").get(|_, _| {
-        let version = std::env!("CARGO_PKG_VERSION");
-        Ok(version.to_owned())
+fn last_viewed(b: &mut IfaceBuilder<Last>) {
+    b.property("last_viewed_exist").get_async(move |mut ctx, change_up| {
+        let change_up = change_up.clone();
+        async move { ctx.reply(Ok(change_up.lock().await.last.is_some())) }
     });
-    b.method("Ping", (), ("pong",), |_, _, _: ()| Ok(("pong".to_owned(),)));
+    b.property("last_viewed").get_async(move |mut ctx, change_up| {
+        let change_up = change_up.clone();
+        async move {
+            let last = change_up.lock().await.last.to_owned().unwrap_or(-1);
+            ctx.reply(Ok(last))
+        }
+    });
+    b.method_with_cr_async(crate::JUMP_BACK_METHOD, (), (), move |mut ctx, cr, _: ()| {
+        let change_up: &Last = cr.data_mut(ctx.path()).unwrap();
+        let change_up = change_up.clone();
+        async move {
+            let mut change_up = change_up.lock().await;
+            if let Some(last) = change_up.last {
+                change_up.conn.run_command(last.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
+            }
+            ctx.reply(Ok(()))
+        }
+    });
 }
 
 enum FocusMode {
@@ -167,11 +158,11 @@ fn rule_focus(b: &mut IfaceBuilder<Last>) {
                 match mode {
                     FocusMode::JumpBack => {
                         if let Some(last) = change_up.last {
-                            jump_back(&mut change_up.conn, last).await;
+                            change_up.conn.run_command(last.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
                         }
                     }
                     FocusMode::Focus(con) => {
-                        focus_con(&mut change_up.conn, con).await;
+                        change_up.conn.run_command(con.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
                     }
                     FocusMode::Exec(cmd) => {
                         change_up.conn.run_command(cmd).await.map_err(|e| log::error!("exec: {}", &e)).ok();
