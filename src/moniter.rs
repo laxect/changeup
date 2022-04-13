@@ -103,12 +103,6 @@ pub async fn moniter(change_up: Last) -> anyhow::Result<()> {
         } else {
             change_up.last = None;
         }
-        if len >= 1 {
-            change_up.now_on = Some(visited_list[len - 1]);
-        } else {
-            change_up.now_on = None;
-        }
-        log::debug!("on: {:?}", change_up.now_on);
         log::debug!("last: {:?}", change_up.last);
         log::debug!("index: {:?}", change_up.index);
         log::debug!("ruleset: {:?}", change_up.ruleset);

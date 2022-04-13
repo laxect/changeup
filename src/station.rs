@@ -129,6 +129,7 @@ fn rule_focus(b: &mut IfaceBuilder<Last>) {
             let change_up = change_up.clone();
             async move {
                 let mut change_up = change_up.lock().await;
+                let now_on = change_up.now_on().await.unwrap();
 
                 let rule = if let Some(ls) = change_up.ruleset.get(&app_kind) {
                     ls
@@ -151,7 +152,7 @@ fn rule_focus(b: &mut IfaceBuilder<Last>) {
                         continue;
                     };
                     // already focus one, jump back
-                    if let Some(now) = change_up.now_on {
+                    if let Some(now) = now_on {
                         if set.contains(&now) {
                             break FocusMode::JumpBack;
                         }

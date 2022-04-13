@@ -9,7 +9,7 @@ use std::{
 
 use futures::lock::Mutex;
 use serde::{Deserialize, Serialize};
-use swayipc_async::{Connection, Node};
+use swayipc_async::{Connection, Node, NodeType};
 
 pub const LEN: usize = 32;
 pub const KEY: &str = "sway:last_focus";
@@ -101,7 +101,6 @@ pub struct ChangeUpConfig {
 
 pub struct ChangeUp {
     pub last: Option<i64>,
-    pub now_on: Option<i64>,
     pub index: HashMap<ConId, HashSet<i64>>,
     pub ruleset: RuleSet,
     pub conn: Connection,
@@ -123,12 +122,22 @@ impl ChangeUp {
         let ChangeUpConfig { ruleset } = toml::from_str(&config)?;
         let change_up = Self {
             last: None,
-            now_on: None,
             index: HashMap::default(),
             conn: Connection::new().await?,
             ruleset,
         };
         Ok(Arc::new(Mutex::new(change_up)))
+    }
+
+    async fn now_on(&mut self) -> anyhow::Result<Option<i64>> {
+        let mut list = vec![self.conn.get_tree().await?];
+        while let Some(mut node) = list.pop() {
+            if matches!(node.node_type, NodeType::Con | NodeType::FloatingCon) && node.nodes.is_empty() && node.focused {
+                return Ok(Some(node.id));
+            }
+            list.append(&mut node.nodes);
+        }
+        Ok(None)
     }
 }
 
