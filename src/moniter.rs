@@ -27,8 +27,15 @@ async fn close(eve: Node, change_up: &Last, visited_list: &mut VecDeque<i64>) ->
     }
     visited_list.retain(|id| *id != node_id);
     let mut change_up = change_up.lock().await;
+    let mut remove_con = false;
     if let Some(wins) = change_up.index.get_mut(&con_id) {
         wins.remove(&node_id);
+        if wins.is_empty() {
+            remove_con = true;
+        }
+    }
+    if remove_con {
+        change_up.index.remove(&con_id);
     }
     Ok(())
 }
@@ -101,9 +108,10 @@ pub async fn moniter(change_up: Last) -> anyhow::Result<()> {
         } else {
             change_up.now_on = None;
         }
-        log::debug!("last: {:?}", change_up.last);
         log::debug!("on: {:?}", change_up.now_on);
-        log::debug!("on: {:?}", change_up.index);
+        log::debug!("last: {:?}", change_up.last);
+        log::debug!("index: {:?}", change_up.index);
+        log::debug!("ruleset: {:?}", change_up.ruleset);
     }
     Ok(())
 }

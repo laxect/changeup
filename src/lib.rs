@@ -1,10 +1,14 @@
 use std::{
     collections::{HashMap, HashSet},
+    fs::File,
     hash::Hash,
+    io::Read,
+    path::Path,
     sync::Arc,
 };
 
 use futures::lock::Mutex;
+use serde::{Deserialize, Serialize};
 use swayipc_async::{Connection, Node};
 
 pub const LEN: usize = 32;
@@ -14,15 +18,19 @@ mod moniter;
 mod station;
 
 pub use moniter::moniter;
-pub use station::dbus_station;
+pub use station::station;
+use station::RuleSet;
 
 #[cfg(not(debug_assertions))]
 pub const NAME: &str = "moe.gyara.changeup";
 #[cfg(debug_assertions)]
 pub const NAME: &str = "moe.gyara.changeupd";
 
-pub const LAST_VIEWED: &str = "/last_viewed";
-pub const JUMP_BACK_METHOD: &str = "Jump";
+pub const PATH: &str = "/";
+pub const FOCUS_METHOD: &str = "Focus";
+pub const JUMP_BACK_METHOD: &str = "JumpBack";
+pub const LOAD_CONFIG_METHOD: &str = "LoadConfig";
+pub const FOCUS_CREATE_OR_JUMPBACK_METHOD: &str = "FCoJ";
 
 #[derive(Clone, Debug)]
 pub enum ConId {
@@ -86,10 +94,16 @@ impl Criteria for i64 {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ChangeUpConfig {
+    pub ruleset: RuleSet,
+}
+
 pub struct ChangeUp {
     pub last: Option<i64>,
     pub now_on: Option<i64>,
     pub index: HashMap<ConId, HashSet<i64>>,
+    pub ruleset: RuleSet,
     pub conn: Connection,
 }
 
@@ -100,6 +114,22 @@ impl ChangeUp {
             now_on: None,
             index: HashMap::default(),
             conn: Connection::new().await?,
+            ruleset: RuleSet::default(),
+        };
+        Ok(Arc::new(Mutex::new(change_up)))
+    }
+
+    pub async fn last_with_config(config_path: &Path) -> anyhow::Result<Last> {
+        let mut config_file = File::open(config_path)?;
+        let mut config = String::new();
+        config_file.read_to_string(&mut config)?;
+        let ChangeUpConfig { ruleset } = toml::from_str(&config)?;
+        let change_up = Self {
+            last: None,
+            now_on: None,
+            index: HashMap::default(),
+            conn: Connection::new().await?,
+            ruleset,
         };
         Ok(Arc::new(Mutex::new(change_up)))
     }

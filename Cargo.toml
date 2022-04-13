@@ -1,6 +1,6 @@
 [package]
 name = "changeup"
-version = "0.1.0"
+version = "0.2.0"
 default-run = "changeup"
 edition = "2021"
 
@@ -15,5 +15,7 @@ dbus-tokio = "0.7.5"
 env_logger = "0.9.0"
 futures = "0.3.21"
 log = "0.4.16"
+serde = { version = "1.0.136", features = ["derive"] }
 swayipc-async = "2.0.0"
 tokio = { version = "1.17.0", features = ["rt-multi-thread"] }
+toml = "0.5.8"
