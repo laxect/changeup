@@ -5,8 +5,10 @@ use dbus_crossroads::{Crossroads, IfaceBuilder};
 
 use crate::{ChangeUpConfig, ConId, Criteria, Last};
 
+mod map_manager;
 mod rule;
 
+pub use map_manager::{Actions, MapManager};
 pub use rule::{Rule, RuleSet};
 
 fn basic(b: &mut IfaceBuilder<Last>) {
@@ -29,8 +31,15 @@ fn config(b: &mut IfaceBuilder<Last>) {
     b.property("ruleset").get_async(move |mut ctx, change_up| {
         let change_up = change_up.clone();
         async move {
-            let config = &change_up.lock().await.ruleset;
-            let reply = toml::to_string_pretty(config).unwrap();
+            let ruleset = &change_up.lock().await.ruleset;
+            let reply = toml::to_string_pretty(ruleset).unwrap();
+            ctx.reply(Ok(reply))
+        }
+    });
+    b.property("actions").get_async(move |mut ctx, change_up| {
+        let change_up = change_up.clone();
+        async move {
+            let reply = change_up.lock().await.map_manager.to_toml();
             ctx.reply(Ok(reply))
         }
     });
@@ -43,6 +52,13 @@ fn config(b: &mut IfaceBuilder<Last>) {
                 Ok(c) => {
                     let mut change_up = change_up.lock().await;
                     change_up.ruleset = c.ruleset;
+                    let new_as = c.actions;
+                    let old_as = change_up.map_manager.replace_actions(new_as.clone());
+                    tokio::spawn(async move {
+                        if let Err(e) = MapManager::reload(old_as, new_as).await {
+                            log::error!("reload failed: {e}")
+                        }
+                    });
                     ctx.reply(Ok(()))
                 }
                 Err(e) => {

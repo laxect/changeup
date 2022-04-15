@@ -1,0 +1,93 @@
+use serde::{Deserialize, Serialize};
+use swayipc_async::Connection;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KeyC {
+    key: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "type")]
+pub enum Keymap {
+    Last {
+        #[serde(flatten)]
+        key: KeyC,
+    },
+}
+
+impl Keymap {
+    fn key(&self) -> &str {
+        match self {
+            Self::Last { key } => &key.key,
+        }
+    }
+
+    fn load(&self) -> String {
+        let key = self.key();
+        let then = match self {
+            Self::Last { .. } => "exec changeup-client last",
+        };
+        format!("bindsym {key} {then}")
+    }
+
+    fn unload(&self) -> String {
+        let key = self.key();
+        format!("unbindsym {key}")
+    }
+}
+
+pub type Actions = Vec<Keymap>;
+
+#[derive(Default)]
+pub struct MapManager {
+    inner: Actions,
+}
+
+impl MapManager {
+    async fn unload(inner: &Actions, conn: &mut Connection) -> anyhow::Result<()> {
+        for val in inner {
+            let cmd = val.unload();
+            conn.run_command(cmd).await?;
+        }
+        Ok(())
+    }
+
+    async fn load(inner: &Actions, conn: &mut Connection) -> anyhow::Result<()> {
+        for val in inner {
+            let cmd = val.load();
+            conn.run_command(cmd).await?;
+        }
+        Ok(())
+    }
+
+    pub fn replace_actions(&mut self, actions: Actions) -> Actions {
+        std::mem::replace(&mut self.inner, actions)
+    }
+
+    pub async fn reload(old_as: Actions, new_as: Actions) -> anyhow::Result<()> {
+        let mut conn = Connection::new().await?;
+        Self::unload(&old_as, &mut conn).await?;
+        Self::load(&new_as, &mut conn).await?;
+        Ok(())
+    }
+
+    pub fn to_toml(&self) -> String {
+        toml::to_string_pretty(&self.inner).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Keymap;
+
+    #[test]
+    fn der() -> anyhow::Result<()> {
+        let input = r#"
+            type = "Last"
+            key = "Alt+C"
+        "#;
+        let out: Keymap = toml::from_str(input)?;
+        assert_eq!(out.key(), "Alt+C");
+        Ok(())
+    }
+}

@@ -6,9 +6,10 @@ use dbus::blocking::{LocalConnection, Proxy};
 #[derive(Subcommand)]
 enum Command {
     Init,
-    RuleFocus { target: String },
-    Focus { target: String },
+    Last,
     Config { path: PathBuf },
+    Focus { target: String },
+    RuleFocus { target: String },
 }
 
 #[derive(Parser)]
@@ -19,6 +20,11 @@ struct Opts {
 
 fn init(proxy: &Proxy<&LocalConnection>) -> anyhow::Result<()> {
     proxy.method_call(changeup::NAME, "Ping", ())?;
+    Ok(())
+}
+
+fn last(proxy: &Proxy<&LocalConnection>) -> anyhow::Result<()> {
+    proxy.method_call(changeup::NAME, changeup::JUMP_BACK_METHOD, ())?;
     Ok(())
 }
 
@@ -46,11 +52,10 @@ fn main() -> anyhow::Result<()> {
     let proxy = conn.with_proxy(changeup::NAME, changeup::PATH, Duration::from_millis(200));
 
     match cmd {
-        Command::Config { path } => load_config(&proxy, path)?,
-        Command::Focus { target } => focus(&proxy, target)?,
-        Command::RuleFocus { target } => focus_create_or_exec(&proxy, target)?,
-        Command::Init => init(&proxy)?,
+        Command::Init => init(&proxy),
+        Command::Last => last(&proxy),
+        Command::Config { path } => load_config(&proxy, path),
+        Command::Focus { target } => focus(&proxy, target),
+        Command::RuleFocus { target } => focus_create_or_exec(&proxy, target),
     }
-
-    Ok(())
 }

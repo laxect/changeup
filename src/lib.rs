@@ -8,7 +8,7 @@ use std::{
 };
 
 use futures::lock::Mutex;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use swayipc_async::{Connection, Node, NodeType};
 
 pub const LEN: usize = 32;
@@ -19,7 +19,7 @@ mod station;
 
 pub use moniter::moniter;
 pub use station::station;
-use station::RuleSet;
+use station::{Actions, MapManager, RuleSet};
 
 #[cfg(not(debug_assertions))]
 pub const NAME: &str = "moe.gyara.changeup";
@@ -94,15 +94,17 @@ impl Criteria for i64 {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 pub struct ChangeUpConfig {
     pub ruleset: RuleSet,
+    pub actions: Actions,
 }
 
 pub struct ChangeUp {
     pub last: Option<i64>,
     pub index: HashMap<ConId, HashSet<i64>>,
     pub ruleset: RuleSet,
+    pub map_manager: MapManager,
     pub conn: Connection,
 }
 
@@ -119,13 +121,20 @@ impl ChangeUp {
         let mut config_file = File::open(config_path)?;
         let mut config = String::new();
         config_file.read_to_string(&mut config)?;
-        let ChangeUpConfig { ruleset } = toml::from_str(&config)?;
-        let change_up = Self {
+        let ChangeUpConfig { ruleset, actions } = toml::from_str(&config)?;
+        let mut change_up = Self {
             last: None,
             index: HashMap::default(),
             conn: Connection::new().await?,
+            map_manager: MapManager::default(),
             ruleset,
         };
+        change_up.map_manager.replace_actions(actions.clone());
+        tokio::spawn(async move {
+            if let Err(e) = MapManager::reload(Vec::default(), actions).await {
+                log::error!("init map failed: {e}");
+            }
+        });
         Ok(Arc::new(Mutex::new(change_up)))
     }
 
