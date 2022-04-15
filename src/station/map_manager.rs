@@ -13,19 +13,26 @@ pub enum Keymap {
         #[serde(flatten)]
         key: KeyC,
     },
+    RuleFocus {
+        #[serde(flatten)]
+        key: KeyC,
+        target: String,
+    },
 }
 
 impl Keymap {
     fn key(&self) -> &str {
         match self {
             Self::Last { key } => &key.key,
+            Self::RuleFocus { key, .. } => &key.key,
         }
     }
 
     fn load(&self) -> String {
         let key = self.key();
         let then = match self {
-            Self::Last { .. } => "exec changeup-client last",
+            Self::Last { .. } => "exec changeup-client last".to_owned(),
+            Self::RuleFocus { target, .. } => format!("exec changeup-client rule-focus {target}"),
         };
         format!("bindsym {key} {then}")
     }
