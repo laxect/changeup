@@ -81,8 +81,8 @@ impl Criteria for ConId {
     #[inline]
     fn criteria(&self) -> String {
         match self {
-            Self::Wayland(id) => format!("[app_id={}]", id),
-            Self::X11(class) => format!(r#"[class="{}"]"#, class),
+            Self::Wayland(id) => format!("[app_id={id}]"),
+            Self::X11(class) => format!("[class=\"{class}\"]"),
         }
     }
 }
@@ -90,7 +90,7 @@ impl Criteria for ConId {
 impl Criteria for i64 {
     #[inline]
     fn criteria(&self) -> String {
-        format!("[con_id={}]", self)
+        format!("[con_id={self}]")
     }
 }
 

@@ -1,5 +1,6 @@
 use std::{fs::File, future, io::Read, path::Path};
 
+use anyhow::anyhow;
 use dbus::{channel::MatchingReceiver, message::MatchRule, MethodErr};
 use dbus_crossroads::{Crossroads, IfaceBuilder};
 
@@ -61,10 +62,7 @@ fn config(b: &mut IfaceBuilder<Last>) {
                     });
                     ctx.reply(Ok(()))
                 }
-                Err(e) => {
-                    let err = MethodErr::failed(&e);
-                    ctx.reply(Err(err))
-                }
+                Err(e) => ctx.reply(Err(MethodErr::failed(&e))),
             }
         }
     });
@@ -98,7 +96,7 @@ fn last_viewed(b: &mut IfaceBuilder<Last>) {
 enum FocusMode {
     JumpBack,
     Focus(i64),
-    Exec(String),
+    Exec(Option<String>),
 }
 
 fn focus(b: &mut IfaceBuilder<Last>) {
@@ -108,10 +106,10 @@ fn focus(b: &mut IfaceBuilder<Last>) {
         let con_id = *change_up
             .index
             .get(&key)
-            .ok_or_else(|| anyhow::anyhow!("node not found"))?
+            .ok_or_else(|| anyhow!("node not found"))?
             .iter()
             .next()
-            .ok_or_else(|| anyhow::anyhow!("node not found"))?;
+            .ok_or_else(|| anyhow!("node not found"))?;
         change_up.conn.run_command(con_id.focus()).await?;
         Ok(())
     }
@@ -127,6 +125,59 @@ fn focus(b: &mut IfaceBuilder<Last>) {
 }
 
 fn rule_focus(b: &mut IfaceBuilder<Last>) {
+    async fn logic(change_up: Last, app_kind: String) -> anyhow::Result<()> {
+        let mut change_up = change_up.lock().await;
+        let now_on = change_up.now_on().await?;
+
+        let rule = change_up.ruleset.get(&app_kind).ok_or_else(|| anyhow!("No such rule set"))?;
+        let mut links = rule.links().iter();
+
+        let mode = loop {
+            // found nothing, exec it
+            let link = if let Some(n) = links.next() {
+                n
+            } else {
+                break FocusMode::Exec(rule.exec());
+            };
+            // the type of link is not important
+            let con_id = ConId::Wayland(link.to_owned());
+            let set = if let Some(set) = change_up.index.get(&con_id) {
+                set
+            } else {
+                continue;
+            };
+            // already focus one, jump back
+            if let Some(now) = now_on {
+                if set.contains(&now) {
+                    break FocusMode::JumpBack;
+                }
+            }
+            // have one, and not focused
+            if !set.is_empty() {
+                let target = set.iter().next().ok_or_else(|| anyhow!("nothing in a box which is not empty"))?;
+                break FocusMode::Focus(*target);
+            }
+        };
+
+        match mode {
+            FocusMode::JumpBack => {
+                if let Some(last) = change_up.last {
+                    change_up.conn.run_command(last.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
+                }
+            }
+            FocusMode::Focus(con) => {
+                change_up.conn.run_command(con.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
+            }
+            FocusMode::Exec(Some(cmd)) => {
+                change_up.conn.run_command(cmd).await.map_err(|e| log::error!("exec: {}", &e)).ok();
+            }
+            FocusMode::Exec(None) => {
+                log::info!("no exec seted");
+            }
+        }
+        Ok(())
+    }
+
     b.method_with_cr_async(
         crate::FOCUS_CREATE_OR_JUMPBACK_METHOD,
         ("app_kind",),
@@ -135,56 +186,8 @@ fn rule_focus(b: &mut IfaceBuilder<Last>) {
             let change_up: &Last = cr.data_mut(ctx.path()).unwrap();
             let change_up = change_up.clone();
             async move {
-                let mut change_up = change_up.lock().await;
-                let now_on = change_up.now_on().await.unwrap();
-
-                let rule = if let Some(ls) = change_up.ruleset.get(&app_kind) {
-                    ls
-                } else {
-                    let err = MethodErr::failed("No such rule set");
-                    return ctx.reply(Err(err));
-                };
-                let mut links = rule.links().iter();
-                let mode = loop {
-                    // found nothing, exec it
-                    let link = if let Some(n) = links.next() {
-                        n
-                    } else {
-                        break FocusMode::Exec(rule.exec());
-                    };
-                    let con_id = ConId::Wayland(link.to_owned());
-                    let set = if let Some(set) = change_up.index.get(&con_id) {
-                        set
-                    } else {
-                        continue;
-                    };
-                    // already focus one, jump back
-                    if let Some(now) = now_on {
-                        if set.contains(&now) {
-                            break FocusMode::JumpBack;
-                        }
-                    }
-                    // have one, and not focused
-                    if !set.is_empty() {
-                        let target = *set.iter().next().unwrap();
-                        break FocusMode::Focus(target);
-                    }
-                };
-
-                match mode {
-                    FocusMode::JumpBack => {
-                        if let Some(last) = change_up.last {
-                            change_up.conn.run_command(last.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
-                        }
-                    }
-                    FocusMode::Focus(con) => {
-                        change_up.conn.run_command(con.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
-                    }
-                    FocusMode::Exec(cmd) => {
-                        change_up.conn.run_command(cmd).await.map_err(|e| log::error!("exec: {}", &e)).ok();
-                    }
-                }
-                ctx.reply(Ok(()))
+                let reply = logic(change_up, app_kind).await.map_err(|e| MethodErr::failed(&e));
+                ctx.reply(reply)
             }
         },
     );

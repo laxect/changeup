@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Rule {
     link: Vec<String>,
-    exec: String,
+    exec: Option<String>,
 }
 
 pub type RuleSet = HashMap<String, Rule>;
@@ -19,7 +19,7 @@ impl Rule {
         &self.link
     }
 
-    pub fn exec(&self) -> String {
-        format!("exec {}", self.exec)
+    pub fn exec(&self) -> Option<String> {
+        self.exec.as_ref().map(|exec| format!("exec {exec}"))
     }
 }
