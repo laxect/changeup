@@ -20,7 +20,7 @@ async fn focus(eve: Node, _change_up: &Last, visited_list: &mut VecDeque<i64>) -
 
 #[inline]
 async fn close(eve: Node, change_up: &Last, visited_list: &mut VecDeque<i64>) -> anyhow::Result<()> {
-    let con_id = ConId::take_from_node(&eve).ok_or_else(|| anyhow::anyhow!("parser con id failed"))?;
+    let con_id = ConId::take_from_node(&eve).ok_or_else(|| anyhow::anyhow!("parser con id failed {:?}", eve))?;
     let node_id = eve.id;
     if !visited_list.contains(&node_id) {
         return Ok(());
@@ -42,7 +42,7 @@ async fn close(eve: Node, change_up: &Last, visited_list: &mut VecDeque<i64>) ->
 
 #[inline]
 async fn new(eve: Node, change_up: &Last) -> anyhow::Result<()> {
-    let con_id = ConId::take_from_node(&eve).ok_or_else(|| anyhow::anyhow!("parser con id failed"))?;
+    let con_id = ConId::take_from_node(&eve).ok_or_else(|| anyhow::anyhow!("parser con id failed {:?}", eve))?;
     let node_id = eve.id;
     let mut change_up = change_up.lock().await;
     let entry = change_up.index.entry(con_id).or_default();
@@ -85,17 +85,11 @@ pub async fn moniter(change_up: Last) -> anyhow::Result<()> {
             _ => unreachable!(),
         };
         match event.change {
-            WindowChange::Focus => {
-                focus(event.container, &change_up, &mut visited_list).await?;
-            }
-            WindowChange::Close => {
-                close(event.container, &change_up, &mut visited_list).await?;
-            }
-            WindowChange::New => {
-                new(event.container, &change_up).await?;
-            }
+            WindowChange::Focus => focus(event.container, &change_up, &mut visited_list).await?,
+            WindowChange::Close => close(event.container, &change_up, &mut visited_list).await?,
+            WindowChange::New => new(event.container, &change_up).await?,
             _ => continue,
-        }
+        };
         let len = visited_list.len();
         let mut change_up = change_up.lock().await;
         if len >= 2 {
