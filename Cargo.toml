@@ -7,8 +7,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.56"
-clap = { version = "3.1.8", features = ["derive"] }
+anyhow = "1.0.57"
+clap = { version = "3.1.12", features = ["derive"] }
 dbus = "0.9.5"
 dbus-crossroads = "0.5.0"
 dbus-tokio = "0.7.5"
@@ -19,4 +19,4 @@ log = "0.4.16"
 serde = { version = "1.0.136", features = ["derive"] }
 swayipc-async = "2.0.0"
 tokio = { version = "1.17.0", features = ["rt-multi-thread"] }
-toml = "0.5.8"
+toml = "0.5.9"
