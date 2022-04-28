@@ -43,8 +43,8 @@ impl ConId {
         if let Some(app_id) = &node.app_id {
             return Some(Self::Wayland(app_id.to_owned()));
         }
-        let class = node.window_properties.as_ref()?.class.as_ref()?;
-        Some(Self::X11(class.to_owned()))
+        let class = node.window_properties.as_ref()?.class.as_ref();
+        class.map_or_else(|| Self::X11("".to_owned()), |s| Self::X11(s.to_owned())).into()
     }
 
     pub fn id(&self) -> &String {

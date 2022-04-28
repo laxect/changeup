@@ -18,5 +18,5 @@ futures = "0.3.21"
 log = "0.4.16"
 serde = { version = "1.0.136", features = ["derive"] }
 swayipc-async = "2.0.0"
-tokio = { version = "1.17.0", features = ["rt-multi-thread"] }
+tokio = { version = "1.18.0", features = ["rt-multi-thread"] }
 toml = "0.5.9"
