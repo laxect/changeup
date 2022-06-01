@@ -39,12 +39,16 @@ pub enum ConId {
 }
 
 impl ConId {
-    pub fn take_from_node(node: &Node) -> Option<Self> {
+    pub fn take_from_node(node: &Node) -> Self {
         if let Some(app_id) = &node.app_id {
-            return Some(Self::Wayland(app_id.to_owned()));
+            return Self::Wayland(app_id.to_owned());
         }
-        let class = node.window_properties.as_ref()?.class.as_ref();
-        class.map_or_else(|| Self::X11("".to_owned()), |s| Self::X11(s.to_owned())).into()
+        if let Some(win) = node.window_properties.as_ref() {
+            let class = win.class.as_ref();
+            class.map_or_else(|| Self::X11("".to_owned()), |s| Self::X11(s.to_owned()))
+        } else {
+            Self::X11(node.name.clone().unwrap_or_else(|| node.id.to_string()))
+        }
     }
 
     pub fn id(&self) -> &String {
