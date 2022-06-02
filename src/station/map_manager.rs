@@ -67,8 +67,13 @@ impl MapManager {
         Ok(())
     }
 
-    pub fn replace_actions(&mut self, actions: Actions) -> Actions {
-        std::mem::replace(&mut self.inner, actions)
+    pub fn replace_actions(&mut self, actions: Actions) {
+        let old_as = std::mem::replace(&mut self.inner, actions.clone());
+        tokio::spawn(async move {
+            if let Err(e) = MapManager::reload(old_as, actions).await {
+                log::error!("reload failed: {e}")
+            }
+        });
     }
 
     pub async fn reload(old_as: Actions, new_as: Actions) -> anyhow::Result<()> {

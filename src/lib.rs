@@ -35,7 +35,7 @@ pub const FOCUS_CREATE_OR_JUMPBACK_METHOD: &str = "FCoJ";
 #[derive(Clone, Debug)]
 pub enum ConId {
     Wayland(String),
-    X11(String),
+    X(String),
 }
 
 impl ConId {
@@ -45,16 +45,16 @@ impl ConId {
         }
         if let Some(win) = node.window_properties.as_ref() {
             let class = win.class.as_ref();
-            class.map_or_else(|| Self::X11("".to_owned()), |s| Self::X11(s.to_owned()))
+            class.map_or_else(|| Self::X("".to_owned()), |s| Self::X(s.to_owned()))
         } else {
-            Self::X11(node.name.clone().unwrap_or_else(|| node.id.to_string()))
+            Self::X(node.name.clone().unwrap_or_else(|| node.id.to_string()))
         }
     }
 
     pub fn id(&self) -> &String {
         match self {
             Self::Wayland(app_id) => app_id,
-            Self::X11(class) => class,
+            Self::X(class) => class,
         }
     }
 }
@@ -78,16 +78,6 @@ pub trait Criteria {
 
     fn focus(&self) -> String {
         format!("{} focus", self.criteria())
-    }
-}
-
-impl Criteria for ConId {
-    #[inline]
-    fn criteria(&self) -> String {
-        match self {
-            Self::Wayland(id) => format!("[app_id={id}]"),
-            Self::X11(class) => format!("[class=\"{class}\"]"),
-        }
     }
 }
 
@@ -133,12 +123,7 @@ impl ChangeUp {
             map_manager: MapManager::default(),
             ruleset,
         };
-        change_up.map_manager.replace_actions(actions.clone());
-        tokio::spawn(async move {
-            if let Err(e) = MapManager::reload(Vec::default(), actions).await {
-                log::error!("init map failed: {e}");
-            }
-        });
+        change_up.map_manager.replace_actions(actions);
         Ok(Arc::new(Mutex::new(change_up)))
     }
 

@@ -54,12 +54,7 @@ fn config(b: &mut IfaceBuilder<Last>) {
                     let mut change_up = change_up.lock().await;
                     change_up.ruleset = c.ruleset;
                     let new_as = c.actions;
-                    let old_as = change_up.map_manager.replace_actions(new_as.clone());
-                    tokio::spawn(async move {
-                        if let Err(e) = MapManager::reload(old_as, new_as).await {
-                            log::error!("reload failed: {e}")
-                        }
-                    });
+                    change_up.map_manager.replace_actions(new_as);
                     ctx.reply(Ok(()))
                 }
                 Err(e) => ctx.reply(Err(MethodErr::failed(&e))),
@@ -103,14 +98,15 @@ fn focus(b: &mut IfaceBuilder<Last>) {
     async fn fo(change_up: Last, target: String) -> anyhow::Result<()> {
         let key = ConId::Wayland(target);
         let mut change_up = change_up.lock().await;
-        let con_id = *change_up
+        // the id (i64) of con
+        let con = *change_up
             .index
             .get(&key)
             .ok_or_else(|| anyhow!("node not found"))?
             .iter()
             .next()
             .ok_or_else(|| anyhow!("node not found"))?;
-        change_up.conn.run_command(con_id.focus()).await?;
+        change_up.conn.run_command(con.focus()).await?;
         Ok(())
     }
 
