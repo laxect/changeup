@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
     fs::File,
     hash::Hash,
@@ -36,6 +37,7 @@ pub const FOCUS_CREATE_OR_JUMPBACK_METHOD: &str = "FCoJ";
 pub enum ConId {
     Wayland(String),
     X(String),
+    Unknown,
 }
 
 impl ConId {
@@ -47,21 +49,22 @@ impl ConId {
             let class = win.class.as_ref();
             class.map_or_else(|| Self::X("".to_owned()), |s| Self::X(s.to_owned()))
         } else {
-            Self::X(node.name.clone().unwrap_or_else(|| node.id.to_string()))
+            Self::Unknown
         }
     }
 
-    pub fn id(&self) -> &String {
+    pub fn id(&self) -> Cow<str> {
         match self {
-            Self::Wayland(app_id) => app_id,
-            Self::X(class) => class,
+            Self::Wayland(app_id) => app_id.into(),
+            Self::X(class) => class.into(),
+            Self::Unknown => "".into(),
         }
     }
 }
 
 impl PartialEq for ConId {
     fn eq(&self, other: &Self) -> bool {
-        self.id().eq(other.id())
+        self.id().eq(&other.id())
     }
 }
 

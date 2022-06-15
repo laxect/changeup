@@ -8,15 +8,15 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.57"
-clap = { version = "3.1.12", features = ["derive"] }
+clap = { version = "3.2.4", features = ["derive"] }
 dbus = "0.9.5"
 dbus-crossroads = "0.5.0"
 dbus-tokio = "0.7.5"
 dirs = "4.0.0"
 env_logger = "0.9.0"
 futures = "0.3.21"
-log = "0.4.16"
-serde = { version = "1.0.136", features = ["derive"] }
+log = "0.4.17"
+serde = { version = "1.0.137", features = ["derive"] }
 swayipc-async = "2.0.0"
-tokio = { version = "1.18.0", features = ["rt-multi-thread"] }
+tokio = { version = "1.19.2", features = ["rt-multi-thread"] }
 toml = "0.5.9"
