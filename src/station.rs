@@ -17,7 +17,16 @@ fn basic(b: &mut IfaceBuilder<Last>) {
         let version = std::env!("CARGO_PKG_VERSION");
         Ok(version.to_owned())
     });
-    b.method("Ping", (), ("pong",), |_, _, _: ()| Ok(("pong".to_owned(),)));
+
+    b.method_with_cr_async("Ping", (), ("pong",), |mut ctx, cr, _: ()| {
+        let change_up: &Last = cr.data_mut(ctx.path()).unwrap();
+        let change_up = change_up.clone();
+        async move {
+            let change_up = change_up.lock().await;
+            change_up.map_manager.reload_actions();
+            ctx.reply(Ok(("pong".to_owned(),)))
+        }
+    });
 }
 
 fn load_config<P: AsRef<Path>>(path: P) -> anyhow::Result<ChangeUpConfig> {

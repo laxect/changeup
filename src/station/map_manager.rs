@@ -67,20 +67,35 @@ impl MapManager {
         Ok(())
     }
 
+    async fn replace(old_as: Actions, new_as: Actions) -> anyhow::Result<()> {
+        let mut conn = Connection::new().await?;
+        Self::unload(&old_as, &mut conn).await?;
+        Self::load(&new_as, &mut conn).await?;
+        Ok(())
+    }
+
     pub fn replace_actions(&mut self, actions: Actions) {
         let old_as = std::mem::replace(&mut self.inner, actions.clone());
         tokio::spawn(async move {
-            if let Err(e) = MapManager::reload(old_as, actions).await {
+            if let Err(e) = MapManager::replace(old_as, actions).await {
                 log::error!("reload failed: {e}")
             }
         });
     }
 
-    pub async fn reload(old_as: Actions, new_as: Actions) -> anyhow::Result<()> {
+    async fn reload(actions: Actions) -> anyhow::Result<()> {
         let mut conn = Connection::new().await?;
-        Self::unload(&old_as, &mut conn).await?;
-        Self::load(&new_as, &mut conn).await?;
+        Self::load(&actions, &mut conn).await?;
         Ok(())
+    }
+
+    pub fn reload_actions(&self) {
+        let actions = self.inner.clone();
+        tokio::spawn(async move {
+            if let Err(e) = MapManager::reload(actions).await {
+                log::error!("reload failed: {e}")
+            }
+        });
     }
 
     pub fn to_toml(&self) -> String {
