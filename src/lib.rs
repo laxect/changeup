@@ -87,7 +87,7 @@ pub trait Criteria {
 impl Criteria for i64 {
     #[inline]
     fn criteria(&self) -> String {
-        format!("[con_id={self}]")
+        format!("[con_id={}]", &self)
     }
 }
 

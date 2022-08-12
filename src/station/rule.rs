@@ -20,6 +20,6 @@ impl Rule {
     }
 
     pub fn exec(&self) -> Option<String> {
-        self.exec.as_ref().map(|exec| format!("exec {exec}"))
+        self.exec.as_ref().map(|exec| format!("exec {}", exec))
     }
 }

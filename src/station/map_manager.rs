@@ -32,14 +32,14 @@ impl Keymap {
         let key = self.key();
         let then = match self {
             Self::Last { .. } => "exec changeup-client last".to_owned(),
-            Self::RuleFocus { target, .. } => format!("exec changeup-client rule-focus {target}"),
+            Self::RuleFocus { target, .. } => format!("exec changeup-client rule-focus {}", target),
         };
-        format!("bindsym {key} {then}")
+        format!("bindsym {} {}", key, then)
     }
 
     fn unload(&self) -> String {
         let key = self.key();
-        format!("unbindsym {key}")
+        format!("unbindsym {}", key)
     }
 }
 
@@ -78,7 +78,7 @@ impl MapManager {
         let old_as = std::mem::replace(&mut self.inner, actions.clone());
         tokio::spawn(async move {
             if let Err(e) = MapManager::replace(old_as, actions).await {
-                log::error!("reload failed: {e}")
+                log::error!("reload failed: {}", e)
             }
         });
     }
@@ -93,7 +93,7 @@ impl MapManager {
         let actions = self.inner.clone();
         tokio::spawn(async move {
             if let Err(e) = MapManager::reload(actions).await {
-                log::error!("reload failed: {e}")
+                log::error!("reload failed: {}", e)
             }
         });
     }
