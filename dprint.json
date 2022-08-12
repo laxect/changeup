@@ -10,7 +10,8 @@
     "**/*.{json,md,toml,rs}"
   ],
   "excludes": [
-    "dist/"
+    "dist/",
+    "vendor"
   ],
   "plugins": [
     "https://plugins.dprint.dev/json-0.15.5.wasm",
