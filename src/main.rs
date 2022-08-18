@@ -6,6 +6,7 @@ use clap::Parser;
 use color_eyre::eyre;
 use futures::FutureExt;
 use tracing::error;
+use tracing_subscriber::layer::SubscriberExt;
 
 #[derive(Parser)]
 struct Opts {
@@ -16,7 +17,11 @@ struct Opts {
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
-    tracing_subscriber::fmt::init();
+
+    // tracing
+    let layer = tracing_journald::layer()?;
+    let subscriber = tracing_subscriber::Registry::default().with(layer);
+    tracing::subscriber::set_global_default(subscriber)?;
 
     let Opts { config } = Opts::parse();
 
