@@ -7,15 +7,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "3.2.4", features = ["derive"] }
-color-eyre = "0.6.2"
-dirs = "4.0.0"
-futures = "0.3.21"
-serde = { version = "1.0.137", features = ["derive"] }
-swayipc-async = "2.0.0"
-tokio = { version = "1.19.2", features = ["rt-multi-thread"] }
-toml = "0.5.9"
-tracing = "0.1.36"
-tracing-journald = "0.3.0"
-tracing-subscriber = "0.3.15"
-zbus = { version = "3.0.0", default-features = false, features = ["tokio"] }
+clap = { version = "3", features = ["derive"] }
+color-eyre = "0.6"
+dirs = "4"
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+swayipc-async = "2"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+toml = "0.5"
+tracing = "0.1"
+tracing-journald = "0.3"
+tracing-subscriber = "0.3"
+zbus = { version = "3", default-features = false, features = ["tokio"] }
