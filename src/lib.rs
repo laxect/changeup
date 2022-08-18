@@ -138,25 +138,20 @@ pub type Last = Arc<Mutex<ChangeUp>>;
 #[dbus_proxy(interface = "moe.gyara.changeup", default_service = "moe.gyara.changeup", default_path = "/")]
 pub trait ChangeUpEP {
     fn version(&self) -> zbus::Result<String>;
-
     fn ping(&self) -> zbus::Result<String>;
 
     #[dbus_proxy(property)]
     fn ruleset(&self) -> zbus::Result<String>;
-
-    fn actions(&self) -> zbus::Result<String>;
-
-    fn reload_config(&mut self, path: &str) -> fdo::Result<String>;
-
+    #[dbus_interface(property)]
+    fn last_viewed(&self) -> zbus::Result<i64>;
     #[dbus_interface(property)]
     fn last_viewed_exist(&self) -> zbus::Result<bool>;
 
-    #[dbus_interface(property)]
-    fn last_viewed(&self) -> zbus::Result<i64>;
+    fn actions(&self) -> zbus::Result<String>;
+    fn reload_config(&mut self, path: &str) -> fdo::Result<String>;
 
     fn jump_to_last_viewed(&mut self) -> zbus::Result<()>;
 
     fn focus(&mut self, target: String) -> fdo::Result<()>;
-
     fn rule_focus(&mut self, app_kind: String) -> fdo::Result<()>;
 }
