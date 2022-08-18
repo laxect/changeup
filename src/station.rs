@@ -1,8 +1,8 @@
-use std::{fs::File, future, io::Read, path::Path};
+use std::{borrow::Cow, fs::File, future, io::Read, path::Path};
 
-use anyhow::anyhow;
-use dbus::{channel::MatchingReceiver, message::MatchRule, MethodErr};
-use dbus_crossroads::{Crossroads, IfaceBuilder};
+use color_eyre::eyre::{self, eyre};
+use tracing::{error, info};
+use zbus::{dbus_interface, fdo, ConnectionBuilder};
 
 use crate::{ChangeUpConfig, ConId, Criteria, Last};
 
@@ -12,89 +12,12 @@ mod rule;
 pub use map_manager::{Actions, MapManager};
 pub use rule::{Rule, RuleSet};
 
-fn basic(b: &mut IfaceBuilder<Last>) {
-    b.property("version").get(|_, _| {
-        let version = std::env!("CARGO_PKG_VERSION");
-        Ok(version.to_owned())
-    });
-
-    b.method_with_cr_async("Ping", (), ("pong",), |mut ctx, cr, _: ()| {
-        let change_up: &Last = cr.data_mut(ctx.path()).unwrap();
-        let change_up = change_up.clone();
-        async move {
-            let change_up = change_up.lock().await;
-            change_up.map_manager.reload_actions();
-            ctx.reply(Ok(("pong".to_owned(),)))
-        }
-    });
-}
-
-fn load_config<P: AsRef<Path>>(path: P) -> anyhow::Result<ChangeUpConfig> {
+fn load_config<P: AsRef<Path>>(path: P) -> eyre::Result<ChangeUpConfig> {
     let mut file = File::open(path)?;
     let mut buffer = String::new();
     file.read_to_string(&mut buffer)?;
     let config = toml::from_str(&buffer)?;
     Ok(config)
-}
-
-fn config(b: &mut IfaceBuilder<Last>) {
-    b.property("ruleset").get_async(move |mut ctx, change_up| {
-        let change_up = change_up.clone();
-        async move {
-            let ruleset = &change_up.lock().await.ruleset;
-            let reply = toml::to_string_pretty(ruleset).unwrap();
-            ctx.reply(Ok(reply))
-        }
-    });
-    b.property("actions").get_async(move |mut ctx, change_up| {
-        let change_up = change_up.clone();
-        async move {
-            let reply = change_up.lock().await.map_manager.to_toml();
-            ctx.reply(Ok(reply))
-        }
-    });
-    b.method_with_cr_async(crate::LOAD_CONFIG_METHOD, ("path",), (), move |mut ctx, cr, (path,): (String,)| {
-        let config = load_config(path);
-        let change_up: &Last = cr.data_mut(ctx.path()).unwrap();
-        let change_up = change_up.clone();
-        async move {
-            match config {
-                Ok(c) => {
-                    let mut change_up = change_up.lock().await;
-                    change_up.ruleset = c.ruleset;
-                    let new_as = c.actions;
-                    change_up.map_manager.replace_actions(new_as);
-                    ctx.reply(Ok(()))
-                }
-                Err(e) => ctx.reply(Err(MethodErr::failed(&e))),
-            }
-        }
-    });
-}
-
-fn last_viewed(b: &mut IfaceBuilder<Last>) {
-    b.property("last_viewed_exist").get_async(move |mut ctx, change_up| {
-        let change_up = change_up.clone();
-        async move { ctx.reply(Ok(change_up.lock().await.last.is_some())) }
-    });
-    b.property("last_viewed").get_async(move |mut ctx, change_up| {
-        let change_up = change_up.clone();
-        async move {
-            let last = change_up.lock().await.last.to_owned().unwrap_or(-1);
-            ctx.reply(Ok(last))
-        }
-    });
-    b.method_with_cr_async(crate::JUMP_BACK_METHOD, (), (), move |mut ctx, cr, _: ()| {
-        let change_up: &Last = cr.data_mut(ctx.path()).unwrap();
-        let change_up = change_up.clone();
-        async move {
-            let mut change_up = change_up.lock().await;
-            if let Some(last) = change_up.last {
-                change_up.conn.run_command(last.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
-            }
-            ctx.reply(Ok(()))
-        }
-    });
 }
 
 enum FocusMode {
@@ -103,139 +26,144 @@ enum FocusMode {
     Exec(Option<String>),
 }
 
-fn focus(b: &mut IfaceBuilder<Last>) {
-    async fn fo(change_up: Last, target: String) -> anyhow::Result<()> {
+struct Station {
+    change_up: Last,
+}
+
+impl Station {
+    async fn fo(&mut self, target: String) -> eyre::Result<()> {
         let key = ConId::Wayland(target);
-        let mut change_up = change_up.lock().await;
+        let mut change_up = self.change_up.lock().await;
         // the id (i64) of con
         let con = *change_up
             .index
             .get(&key)
-            .ok_or_else(|| anyhow!("node not found"))?
+            .ok_or_else(|| eyre!("node not found"))?
             .iter()
             .next()
-            .ok_or_else(|| anyhow!("node not found"))?;
+            .ok_or_else(|| eyre!("node not found"))?;
         change_up.conn.run_command(con.focus()).await?;
         Ok(())
     }
 
-    b.method_with_cr_async(crate::FOCUS_METHOD, ("target",), (), move |mut ctx, cr, (target,): (String,)| {
-        let change_up: &Last = cr.data_mut(ctx.path()).unwrap();
-        let change_up = change_up.clone();
-        async move {
-            let res = fo(change_up, target).await.map_err(|e| MethodErr::failed(&e));
-            ctx.reply(res)
-        }
-    });
-}
+    async fn rule_fo(&mut self, app_kind: String) -> eyre::Result<()> {
+        let mut change_up = self.change_up.lock().await;
 
-fn rule_focus(b: &mut IfaceBuilder<Last>) {
-    async fn logic(change_up: Last, app_kind: String) -> anyhow::Result<()> {
-        let mut change_up = change_up.lock().await;
         let now_on = change_up.now_on().await?;
+        let rule = change_up.ruleset.get(&app_kind).ok_or_else(|| eyre!("No such rule set"))?;
 
-        let rule = change_up.ruleset.get(&app_kind).ok_or_else(|| anyhow!("No such rule set"))?;
-        let mut links = rule.links().iter();
-
-        let mode = loop {
-            // found nothing, exec it
-            let link = if let Some(n) = links.next() {
-                n
-            } else {
-                break FocusMode::Exec(rule.exec());
-            };
-            // the type of link is not important
+        // if find nothing, then exec
+        let mut mode = FocusMode::Exec(rule.exec());
+        for link in rule.links().iter() {
             let con_id = ConId::Wayland(link.to_owned());
-            let set = if let Some(set) = change_up.index.get(&con_id) {
-                set
-            } else {
-                continue;
-            };
-            // already focus one, jump back
-            if let Some(now) = now_on {
-                if set.contains(&now) {
-                    break FocusMode::JumpBack;
+            if let Some(set) = change_up.index.get(&con_id) {
+                if let Some(now) = now_on {
+                    // if already focus one, then jump back
+                    if set.contains(&now) {
+                        mode = FocusMode::JumpBack;
+                        break;
+                    }
+                    // if already one and not focus, then focus it
+                    if let Some(target) = set.iter().next() {
+                        mode = FocusMode::Focus(*target);
+                        break;
+                    }
                 }
             }
-            // have one, and not focused
-            if !set.is_empty() {
-                let target = set.iter().next().ok_or_else(|| anyhow!("nothing in a box which is not empty"))?;
-                break FocusMode::Focus(*target);
-            }
-        };
+        }
 
         match mode {
             FocusMode::JumpBack => {
                 if let Some(last) = change_up.last {
-                    change_up.conn.run_command(last.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
+                    change_up.conn.run_command(last.focus()).await.map_err(|e| error!("cmd: {}", e)).ok();
                 }
             }
             FocusMode::Focus(con) => {
-                change_up.conn.run_command(con.focus()).await.map_err(|e| log::error!("cmd: {}", e)).ok();
+                change_up.conn.run_command(con.focus()).await.map_err(|e| error!("cmd: {}", e)).ok();
             }
             FocusMode::Exec(Some(cmd)) => {
-                change_up.conn.run_command(cmd).await.map_err(|e| log::error!("exec: {}", &e)).ok();
+                change_up.conn.run_command(cmd).await.map_err(|e| error!("exec: {}", &e)).ok();
             }
             FocusMode::Exec(None) => {
-                log::info!("no exec seted");
+                info!("no exec seted");
             }
         }
         Ok(())
     }
+}
 
-    b.method_with_cr_async(
-        crate::FOCUS_CREATE_OR_JUMPBACK_METHOD,
-        ("app_kind",),
-        (),
-        move |mut ctx, cr, (app_kind,): (String,)| {
-            let change_up: &Last = cr.data_mut(ctx.path()).unwrap();
-            let change_up = change_up.clone();
-            async move {
-                let reply = logic(change_up, app_kind).await.map_err(|e| MethodErr::failed(&e));
-                ctx.reply(reply)
-            }
-        },
-    );
+#[dbus_interface(name = "moe.gyara.changeup")]
+impl Station {
+    fn version(&self) -> Cow<str> {
+        env!("CARGO_PKG_VERSION").into()
+    }
+
+    async fn ping(&self) -> Cow<str> {
+        let change_up = self.change_up.lock().await;
+        change_up.map_manager.reload_actions();
+        "pong".into()
+    }
+
+    #[dbus_interface(property, name = "Ruleset")]
+    async fn ruleset(&self) -> String {
+        let ruleset = &self.change_up.lock().await.ruleset;
+        toml::to_string_pretty(ruleset).unwrap()
+    }
+
+    async fn actions(&self) -> String {
+        self.change_up.lock().await.map_manager.to_toml()
+    }
+
+    async fn reload_config(&mut self, path: &str) -> fdo::Result<Cow<str>> {
+        let config = load_config(path).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let mut change_up = self.change_up.lock().await;
+        change_up.ruleset = config.ruleset;
+        let new_as = config.actions;
+        change_up.map_manager.replace_actions(new_as);
+        Ok("done".into())
+    }
+
+    #[dbus_interface(property, name = "LastViewedExist")]
+    async fn last_viewed_exist(&self) -> bool {
+        let change_up = self.change_up.lock().await;
+        change_up.last.is_some()
+    }
+
+    #[dbus_interface(property, name = "LastViewed")]
+    async fn last_viewed(&self) -> i64 {
+        self.change_up.lock().await.last.unwrap_or(-1)
+    }
+
+    async fn jump_to_last_viewed(&mut self) {
+        let mut change_up = self.change_up.lock().await;
+        if let Some(last) = change_up.last {
+            change_up.conn.run_command(last.focus()).await.map_err(|e| error!("cmd: {}", e)).ok();
+        } else {
+            info!("no last yet");
+        }
+    }
+
+    async fn focus(&mut self, target: String) -> fdo::Result<()> {
+        self.fo(target).await.map_err(|e| fdo::Error::Failed(e.to_string()))
+    }
+
+    async fn rule_focus(&mut self, app_kind: String) -> fdo::Result<()> {
+        self.rule_fo(app_kind).await.map_err(|e| fdo::Error::Failed(e.to_string()))
+    }
 }
 
 // dbus station
-pub async fn station(change_up: Last) -> anyhow::Result<()> {
-    log::info!("station up");
+pub async fn station(change_up: Last) -> eyre::Result<()> {
+    info!("station up");
+    let station = Station { change_up };
 
-    let (resource, conn) = dbus_tokio::connection::new_session_sync()?;
-    let _handle = tokio::spawn(async {
-        let err = resource.await;
-        log::error!("Lost connection to D-Bus: {}", err);
-    });
+    let _handler = ConnectionBuilder::session()?
+        .name("moe.gyara.changeup")?
+        .serve_at("/", station)?
+        .build()
+        .await?;
 
-    conn.request_name(crate::NAME, true, true, false).await?;
-
-    let mut road = Crossroads::new();
-    road.set_async_support(Some((
-        conn.clone(),
-        Box::new(|x| {
-            tokio::spawn(x);
-        }),
-    )));
-
-    let token = road.register(crate::NAME, |b: &mut IfaceBuilder<Last>| {
-        basic(b);
-        focus(b);
-        config(b);
-        rule_focus(b);
-        last_viewed(b);
-    });
-    road.insert(crate::PATH, &[token], change_up);
-
-    conn.start_receive(
-        MatchRule::new_method_call(),
-        Box::new(move |msg, conn| {
-            road.handle_message(msg, conn).unwrap();
-            true
-        }),
-    );
-
-    log::info!("station set up");
+    info!("station set up");
     future::pending::<()>().await;
     Ok(())
 }

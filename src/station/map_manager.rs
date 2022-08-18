@@ -1,5 +1,7 @@
+use color_eyre::eyre;
 use serde::{Deserialize, Serialize};
 use swayipc_async::Connection;
+use tracing::error;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeyC {
@@ -51,7 +53,7 @@ pub struct MapManager {
 }
 
 impl MapManager {
-    async fn unload(inner: &Actions, conn: &mut Connection) -> anyhow::Result<()> {
+    async fn unload(inner: &Actions, conn: &mut Connection) -> eyre::Result<()> {
         for val in inner {
             let cmd = val.unload();
             conn.run_command(cmd).await?;
@@ -59,7 +61,7 @@ impl MapManager {
         Ok(())
     }
 
-    async fn load(inner: &Actions, conn: &mut Connection) -> anyhow::Result<()> {
+    async fn load(inner: &Actions, conn: &mut Connection) -> eyre::Result<()> {
         for val in inner {
             let cmd = val.load();
             conn.run_command(cmd).await?;
@@ -67,7 +69,7 @@ impl MapManager {
         Ok(())
     }
 
-    async fn replace(old_as: Actions, new_as: Actions) -> anyhow::Result<()> {
+    async fn replace(old_as: Actions, new_as: Actions) -> eyre::Result<()> {
         let mut conn = Connection::new().await?;
         Self::unload(&old_as, &mut conn).await?;
         Self::load(&new_as, &mut conn).await?;
@@ -78,12 +80,12 @@ impl MapManager {
         let old_as = std::mem::replace(&mut self.inner, actions.clone());
         tokio::spawn(async move {
             if let Err(e) = MapManager::replace(old_as, actions).await {
-                log::error!("reload failed: {}", e)
+                error!("reload failed: {}", e)
             }
         });
     }
 
-    async fn reload(actions: Actions) -> anyhow::Result<()> {
+    async fn reload(actions: Actions) -> eyre::Result<()> {
         let mut conn = Connection::new().await?;
         Self::load(&actions, &mut conn).await?;
         Ok(())
@@ -93,7 +95,7 @@ impl MapManager {
         let actions = self.inner.clone();
         tokio::spawn(async move {
             if let Err(e) = MapManager::reload(actions).await {
-                log::error!("reload failed: {}", e)
+                error!("reload failed: {}", e)
             }
         });
     }
@@ -108,7 +110,7 @@ mod test {
     use super::Keymap;
 
     #[test]
-    fn der() -> anyhow::Result<()> {
+    fn der() -> color_eyre::eyre::Result<()> {
         let input = r#"
             type = "Last"
             key = "Alt+C"

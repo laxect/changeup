@@ -1,7 +1,9 @@
-use std::{path::PathBuf, time::Duration};
+use std::{fmt::Display, path::PathBuf};
 
+use changeup::ChangeUpEPProxyBlocking;
 use clap::{Parser, Subcommand};
-use dbus::blocking::{LocalConnection, Proxy};
+use color_eyre::eyre;
+use zbus::blocking::Connection;
 
 #[derive(Subcommand)]
 enum Command {
@@ -18,44 +20,26 @@ struct Opts {
     cmd: Command,
 }
 
-fn init(proxy: &Proxy<&LocalConnection>) -> anyhow::Result<()> {
-    proxy.method_call(changeup::NAME, "Ping", ())?;
-    Ok(())
+fn print<T: Display>(item: T) {
+    print!("{}", item)
 }
 
-fn last(proxy: &Proxy<&LocalConnection>) -> anyhow::Result<()> {
-    proxy.method_call(changeup::NAME, changeup::JUMP_BACK_METHOD, ())?;
-    Ok(())
-}
-
-fn focus(proxy: &Proxy<&LocalConnection>, target: String) -> anyhow::Result<()> {
-    proxy.method_call(changeup::NAME, changeup::FOCUS_METHOD, (target,))?;
-    Ok(())
-}
-
-fn load_config(proxy: &Proxy<&LocalConnection>, path: PathBuf) -> anyhow::Result<()> {
-    proxy.method_call(changeup::NAME, changeup::LOAD_CONFIG_METHOD, (path.to_string_lossy().to_string(),))?;
-    Ok(())
-}
-
-fn focus_create_or_exec(proxy: &Proxy<&LocalConnection>, target: String) -> anyhow::Result<()> {
-    proxy.method_call(changeup::NAME, changeup::FOCUS_CREATE_OR_JUMPBACK_METHOD, (target,))?;
-    Ok(())
-}
-
-fn main() -> anyhow::Result<()> {
-    env_logger::init();
+fn main() -> eyre::Result<()> {
+    color_eyre::install()?;
 
     let Opts { cmd } = Opts::parse();
 
-    let conn = LocalConnection::new_session()?;
-    let proxy = conn.with_proxy(changeup::NAME, changeup::PATH, Duration::from_millis(200));
+    let conn = Connection::session()?;
+    let mut proxy = ChangeUpEPProxyBlocking::builder(&conn)
+        .cache_properties(zbus::CacheProperties::No)
+        .build()?;
 
     match cmd {
-        Command::Init => init(&proxy),
-        Command::Last => last(&proxy),
-        Command::Config { path } => load_config(&proxy, path),
-        Command::Focus { target } => focus(&proxy, target),
-        Command::RuleFocus { target } => focus_create_or_exec(&proxy, target),
+        Command::Init => proxy.ping().map(print)?,
+        Command::Last => proxy.jump_to_last_viewed()?,
+        Command::Config { path } => proxy.reload_config(&path.to_string_lossy()).map(print)?,
+        Command::Focus { target } => proxy.focus(target)?,
+        Command::RuleFocus { target } => proxy.rule_focus(target)?,
     }
+    Ok(())
 }

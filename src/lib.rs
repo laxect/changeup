@@ -8,6 +8,7 @@ use std::{
     sync::Arc,
 };
 
+use color_eyre::eyre::{self, eyre};
 use futures::lock::Mutex;
 use serde::Deserialize;
 use swayipc_async::{Connection, Node, NodeType};
@@ -21,17 +22,7 @@ mod station;
 pub use moniter::moniter;
 pub use station::station;
 use station::{Actions, MapManager, RuleSet};
-
-#[cfg(not(debug_assertions))]
-pub const NAME: &str = "moe.gyara.changeup";
-#[cfg(debug_assertions)]
-pub const NAME: &str = "moe.gyara.changeupd";
-
-pub const PATH: &str = "/";
-pub const FOCUS_METHOD: &str = "Focus";
-pub const JUMP_BACK_METHOD: &str = "JumpBack";
-pub const LOAD_CONFIG_METHOD: &str = "LoadConfig";
-pub const FOCUS_CREATE_OR_JUMPBACK_METHOD: &str = "FCoJ";
+use zbus::{dbus_proxy, fdo};
 
 #[derive(Clone, Debug)]
 pub enum ConId {
@@ -108,13 +99,13 @@ pub struct ChangeUp {
 const DEFAULT_CONFIG: &str = "changeup/config.toml";
 
 impl ChangeUp {
-    pub async fn last() -> anyhow::Result<Last> {
-        let mut config = dirs::config_dir().ok_or_else(|| anyhow::anyhow!("?"))?;
+    pub async fn last() -> eyre::Result<Last> {
+        let mut config = dirs::config_dir().ok_or_else(|| eyre!("?"))?;
         config.push(DEFAULT_CONFIG);
         Self::last_with_config(config).await
     }
 
-    pub async fn last_with_config<P: AsRef<Path>>(config_path: P) -> anyhow::Result<Last> {
+    pub async fn last_with_config<P: AsRef<Path>>(config_path: P) -> eyre::Result<Last> {
         let mut config_file = File::open(config_path)?;
         let mut config = String::new();
         config_file.read_to_string(&mut config)?;
@@ -130,7 +121,7 @@ impl ChangeUp {
         Ok(Arc::new(Mutex::new(change_up)))
     }
 
-    async fn now_on(&mut self) -> anyhow::Result<Option<i64>> {
+    async fn now_on(&mut self) -> eyre::Result<Option<i64>> {
         let mut list = vec![self.conn.get_tree().await?];
         while let Some(mut node) = list.pop() {
             if matches!(node.node_type, NodeType::Con | NodeType::FloatingCon) && node.nodes.is_empty() && node.focused {
@@ -143,3 +134,29 @@ impl ChangeUp {
 }
 
 pub type Last = Arc<Mutex<ChangeUp>>;
+
+#[dbus_proxy(interface = "moe.gyara.changeup", default_service = "moe.gyara.changeup", default_path = "/")]
+pub trait ChangeUpEP {
+    fn version(&self) -> zbus::Result<String>;
+
+    fn ping(&self) -> zbus::Result<String>;
+
+    #[dbus_proxy(property)]
+    fn ruleset(&self) -> zbus::Result<String>;
+
+    fn actions(&self) -> zbus::Result<String>;
+
+    fn reload_config(&mut self, path: &str) -> fdo::Result<String>;
+
+    #[dbus_interface(property)]
+    fn last_viewed_exist(&self) -> zbus::Result<bool>;
+
+    #[dbus_interface(property)]
+    fn last_viewed(&self) -> zbus::Result<i64>;
+
+    fn jump_to_last_viewed(&mut self) -> zbus::Result<()>;
+
+    fn focus(&mut self, target: String) -> fdo::Result<()>;
+
+    fn rule_focus(&mut self, app_kind: String) -> fdo::Result<()>;
+}

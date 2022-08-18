@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
-use clap::Parser;
-use futures::FutureExt;
-
 use changeup::{moniter, station, ChangeUp};
+
+use clap::Parser;
+use color_eyre::eyre;
+use futures::FutureExt;
+use tracing::error;
 
 #[derive(Parser)]
 struct Opts {
@@ -12,8 +14,9 @@ struct Opts {
     config: Option<PathBuf>,
 }
 
-fn main() -> anyhow::Result<()> {
-    env_logger::init();
+fn main() -> eyre::Result<()> {
+    color_eyre::install()?;
+    tracing_subscriber::fmt::init();
 
     let Opts { config } = Opts::parse();
 
@@ -32,7 +35,7 @@ fn main() -> anyhow::Result<()> {
             y = moniter(change_up).fuse() => y,
         };
         if let Err(e) = end {
-            log::error!("E: {}", &e);
+            error!("E: {}", &e);
         }
     });
 

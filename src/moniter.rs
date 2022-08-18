@@ -1,14 +1,16 @@
 use std::collections::VecDeque;
 
+use color_eyre::eyre;
 use futures::StreamExt;
 use swayipc_async::{Connection, Event, EventType, WindowChange};
+use tracing::{debug, info};
 
 use crate::{ConId, Last, Node};
 
 const SUBS: [swayipc_async::EventType; 1] = [EventType::Window];
 
 #[inline]
-async fn focus(eve: Node, _change_up: &Last, visited_list: &mut VecDeque<i64>) -> anyhow::Result<()> {
+async fn focus(eve: Node, _change_up: &Last, visited_list: &mut VecDeque<i64>) -> eyre::Result<()> {
     let node_id = eve.id;
     visited_list.retain(|id| *id != node_id);
     visited_list.push_back(node_id);
@@ -19,7 +21,7 @@ async fn focus(eve: Node, _change_up: &Last, visited_list: &mut VecDeque<i64>) -
 }
 
 #[inline]
-async fn close(eve: Node, change_up: &Last, visited_list: &mut VecDeque<i64>) -> anyhow::Result<()> {
+async fn close(eve: Node, change_up: &Last, visited_list: &mut VecDeque<i64>) -> eyre::Result<()> {
     let con_id = ConId::take_from_node(&eve);
     let node_id = eve.id;
     if !visited_list.contains(&node_id) {
@@ -41,7 +43,7 @@ async fn close(eve: Node, change_up: &Last, visited_list: &mut VecDeque<i64>) ->
 }
 
 #[inline]
-async fn new(eve: Node, change_up: &Last) -> anyhow::Result<()> {
+async fn new(eve: Node, change_up: &Last) -> eyre::Result<()> {
     let con_id = ConId::take_from_node(&eve);
     let node_id = eve.id;
     let mut change_up = change_up.lock().await;
@@ -50,7 +52,7 @@ async fn new(eve: Node, change_up: &Last) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn scan(conn: &mut Connection, change_up: &Last) -> anyhow::Result<()> {
+async fn scan(conn: &mut Connection, change_up: &Last) -> eyre::Result<()> {
     use swayipc_async::NodeType;
 
     let tree = conn.get_tree().await?;
@@ -71,8 +73,8 @@ async fn scan(conn: &mut Connection, change_up: &Last) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn moniter(change_up: Last) -> anyhow::Result<()> {
-    log::info!("moniter up");
+pub async fn moniter(change_up: Last) -> eyre::Result<()> {
+    info!("moniter up");
 
     let mut conn = Connection::new().await?;
     scan(&mut conn, &change_up).await?;
@@ -97,9 +99,9 @@ pub async fn moniter(change_up: Last) -> anyhow::Result<()> {
         } else {
             change_up.last = None;
         }
-        log::debug!("last: {:?}", change_up.last);
-        log::debug!("index: {:?}", change_up.index);
-        log::debug!("ruleset: {:?}", change_up.ruleset);
+        debug!("last: {:?}", change_up.last);
+        debug!("index: {:?}", change_up.index);
+        debug!("ruleset: {:?}", change_up.ruleset);
     }
     Ok(())
 }
