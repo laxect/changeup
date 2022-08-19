@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fs::File, future, io::Read, path::Path};
+use std::{fs::File, future, io::Read, path::Path};
 
 use color_eyre::eyre::{self, eyre};
 use tracing::{error, info};
@@ -94,17 +94,17 @@ impl Station {
 
 #[dbus_interface(name = "moe.gyara.changeup")]
 impl Station {
-    fn version(&self) -> Cow<str> {
-        env!("CARGO_PKG_VERSION").into()
+    fn version(&self) -> &str {
+        env!("CARGO_PKG_VERSION")
     }
 
-    async fn ping(&self) -> Cow<str> {
+    async fn ping(&self) -> &str {
         let change_up = self.change_up.lock().await;
         change_up.map_manager.reload_actions();
-        "pong".into()
+        "pong"
     }
 
-    #[dbus_interface(property, name = "Ruleset")]
+    #[dbus_interface(property)]
     async fn ruleset(&self) -> String {
         let ruleset = &self.change_up.lock().await.ruleset;
         toml::to_string_pretty(ruleset).unwrap()
@@ -114,22 +114,22 @@ impl Station {
         self.change_up.lock().await.map_manager.to_toml()
     }
 
-    async fn reload_config(&mut self, path: &str) -> fdo::Result<Cow<str>> {
+    async fn reload_config(&mut self, path: &str) -> fdo::Result<&str> {
         let config = load_config(path).map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let mut change_up = self.change_up.lock().await;
         change_up.ruleset = config.ruleset;
         let new_as = config.actions;
         change_up.map_manager.replace_actions(new_as);
-        Ok("done".into())
+        Ok("done")
     }
 
-    #[dbus_interface(property, name = "LastViewedExist")]
+    #[dbus_interface(property)]
     async fn last_viewed_exist(&self) -> bool {
         let change_up = self.change_up.lock().await;
         change_up.last.is_some()
     }
 
-    #[dbus_interface(property, name = "LastViewed")]
+    #[dbus_interface(property)]
     async fn last_viewed(&self) -> i64 {
         self.change_up.lock().await.last.unwrap_or(-1)
     }
